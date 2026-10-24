@@ -1,0 +1,42 @@
+# Python virtual environments
+venv/
+.venv/
+env/
+friday_env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Environment variables and secrets
+.env
+.env.*
+
+# Logs
+*.log
+
+# IDE settings
+.vscode/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Downloaded AI models
+*.gguf
+*.safetensors
+*.pt
+*.pth
+*.engine
+
+# Temporary files
+*.tmp
+*.bak
+
+# Audio recordings and generated audio
+*.wav
+*.mp3
+*.onnx
+*.onnx.json
+*.onnx copy.json
+cusparselt-local-tegra-repo-ubuntu2204-0.8.1_0.8.1-1_arm64.deb
