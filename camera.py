@@ -31,16 +31,13 @@ FACE_THRESHOLD = 0.363
 
 face_count = 0
 
-# Backward-compatible list of names.
-# Example: ["Luka", "Unknown"]
-recognized_people = []
-
 # Detailed results for every detected face.
 face_results = []
 
-known_faces = {}
+# Latest raw (unflipped) camera frame, shared with object detection.
+latest_frame = None
 
-last_face_features = []
+known_faces = {}
 
 # Protect data accessed by the camera and voice threads.
 state_lock = threading.Lock()
@@ -296,11 +293,6 @@ def get_face_count():
         return face_count
 
 
-def get_recognized_people():
-    with state_lock:
-        return recognized_people.copy()
-
-
 def get_face_results():
 
     with state_lock:
@@ -309,11 +301,21 @@ def get_face_results():
             for result in face_results
         ]
 
+
+def get_latest_frame():
+    """Return a copy of the latest unflipped camera frame, or None."""
+
+    with state_lock:
+        if latest_frame is None:
+            return None
+
+        return latest_frame.copy()
+
+
 def start_face_detection():
     global face_count
-    global recognized_people
     global face_results
-    global last_face_features
+    global latest_frame
 
     detector, recognizer = create_models()
 
@@ -336,7 +338,8 @@ def start_face_detection():
     print("Voice registration is enabled.")
     print("===================================\n")
 
-    camera_stop_event.clear()
+    # Don't clear camera_stop_event here: a stop requested while
+    # the models were loading must not be lost.
 
     try:
         while not camera_stop_event.is_set():
@@ -353,6 +356,12 @@ def start_face_detection():
                 )
                 time.sleep(0.1)
                 continue
+
+            # Share the frame before mirroring so object detection
+            # sees the real orientation. cv2.flip returns a new
+            # array, so this one is never modified afterwards.
+            with state_lock:
+                latest_frame = frame
 
             # Mirror the camera image.
             frame = cv2.flip(frame, 1)
@@ -414,13 +423,6 @@ def start_face_detection():
                 face_count = len(current_results)
                 face_results = current_results.copy()
 
-                recognized_people = [
-                    result["name"]
-                    for result in current_results
-                ]
-
-                last_face_features = current_features.copy()
-
             # Process registration using this frame's features.
             process_registration(current_features)
 
@@ -450,9 +452,8 @@ def start_face_detection():
 
         with state_lock:
             face_count = 0
-            recognized_people = []
             face_results = []
-            last_face_features = []
+            latest_frame = None
 
         print("\n[FRIDAY] Vision system stopped.")
 
