@@ -5,7 +5,11 @@ import time
 import cv2
 import numpy as np
 
-from camera import get_face_results, get_latest_frame
+from camera import (
+    get_face_results,
+    get_latest_frame,
+    vision_pause_event
+)
 from config import CALLNAME, OBJECT_DETECTION_FPS
 
 try:
@@ -338,6 +342,11 @@ def start_object_detection():
 
     try:
         while not object_stop_event.is_set():
+
+            # Paused while FRIDAY speaks (see camera.py).
+            if vision_pause_event.is_set():
+                object_stop_event.wait(0.05)
+                continue
 
             started = time.monotonic()
 

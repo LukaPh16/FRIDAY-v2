@@ -17,7 +17,8 @@ from audio_input import (
 from camera import (
     start_face_detection,
     stop_face_detection,
-    register_person_by_name
+    register_person_by_name,
+    vision_pause_event
 )
 from commands import route_command
 from config import NAME, CALLNAME, WAKEWORD, MIN_VOLUME
@@ -73,7 +74,9 @@ def start_up(res):
 
     warmup_ollama()
 
-    res.tts = TTSEngine(voice)
+    # Camera and YOLO pause while FRIDAY speaks so speech is
+    # generated in real time.
+    res.tts = TTSEngine(voice, speaking_event=vision_pause_event)
 
     res.camera_thread = Thread(
         target=start_face_detection,

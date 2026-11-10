@@ -8,7 +8,7 @@ Still a work in progress, so expect things to change.
 
 - Listens for the wake word "Friday", or always listens if you tell it to
 - Answers questions with a small local LLM (qwen2.5:0.5b through Ollama)
-- Talks back with Piper TTS
+- Talks back with Pocket TTS (Kyutai), voice "eve"
 - Learns faces by voice and recognizes people later
 - Describes what it sees with YOLO11n, e.g. "I see Luka, a laptop and two cups, sir."
 - Remembers simple facts you tell it
@@ -44,13 +44,27 @@ Anything else goes to the LLM.
 
 ## Setup
 
-Install the Python packages:
+Create a venv and install NVIDIA's Jetson PyTorch wheel first (the normal pip version runs on the CPU only). It has to match the JetPack version: JetPack 6.0 ships cuDNN 8, so use the 2.4.0 build from NVIDIA's `jp/v60` folder. The 2.5.0 build is for JetPack 6.1 and needs cuDNN 9.
 
 ```
-pip install openai-whisper ollama piper-tts pyaudio sounddevice soundfile numpy scipy opencv-python pyserial
+python3 -m venv venv
+wget https://developer.download.nvidia.com/compute/redist/jp/v60/pytorch/torch-2.4.0a0+3bcc3cddb5.nv24.07.16234504-cp310-cp310-linux_aarch64.whl
+venv/bin/pip install torch-2.4.0a0+3bcc3cddb5.nv24.07.16234504-cp310-cp310-linux_aarch64.whl
 ```
 
-On the Jetson, PyTorch and onnxruntime-gpu have to be NVIDIA's Jetson builds for your JetPack version. The normal pip versions either won't install or will run on the CPU only.
+This torch also needs cuSPARSELt (the `cusparselt-local-tegra-repo` .deb), which installs into a folder the linker doesn't search. Add it once:
+
+```
+echo /usr/lib/aarch64-linux-gnu/libcusparseLt/12 | sudo tee /etc/ld.so.conf.d/cusparselt.conf
+sudo ldconfig
+```
+
+Pocket TTS asks for `torch>=2.5.0` and `numpy>=2`, but it works with this torch and numpy 1.x. Install it with `--no-deps` or pip will replace torch. NVIDIA's torch 2.4 is built against numpy 1.x, so numpy has to stay below 2 (and opencv-python below 4.12, which needs numpy 2):
+
+```
+venv/bin/pip install --no-deps pocket-tts
+venv/bin/pip install "numpy<2" "opencv-python<4.12" einops huggingface-hub pydantic requests safetensors scipy sentencepiece tokenizers typer typing-extensions fastapi python-multipart uvicorn soundfile openai-whisper ollama pyaudio sounddevice pyserial onnxruntime
+```
 
 Install Ollama and pull the model:
 
@@ -62,15 +76,21 @@ The model files aren't in the repo, so you need to download them and put them he
 
 ```
 FRIDAY-v2/
-  en_US-hfc_female-medium.onnx
-  en_US-hfc_female-medium.onnx.json
   models/
     face_detection_yunet_2023mar.onnx
     face_recognition_sface_2021dec.onnx
     yolo11n.onnx
+    pocket_tts/        (Hugging Face cache, see below)
 ```
 
-- Piper voice: https://huggingface.co/rhasspy/piper-voices
+Pocket TTS runs offline, so download its weights and the eve voice once:
+
+```
+FRIDAY_TTS_ONLINE=1 venv/bin/python -c "import tts; tts.load_voice()"
+```
+
+The model and voice are set with `TTS_LANGUAGE` and `TTS_VOICE` in config.py. The default `english_7m_2026-10` is the small model and runs faster than real time on the Orin Nano. `english` sounds a bit better but is about 2x slower than real time.
+
 - YuNet and SFace: https://github.com/opencv/opencv_zoo
 - YOLO11n: exported from Ultralytics with `yolo export model=yolo11n.pt format=onnx`
 
@@ -79,7 +99,7 @@ If yolo11n.onnx is missing it still runs, it just says object detection isn't av
 Then run:
 
 ```
-python main.py
+venv/bin/python main.py
 ```
 
 Ctrl+C or "goodbye" to stop. memory.json and faces.json get created on their own.
@@ -91,7 +111,7 @@ Settings like the wake word, what it calls you, mic name and sensitivity, and th
 - main.py: startup, the main loop and cleanup
 - config.py: settings
 - audio_input.py: mic, recording and Whisper
-- tts.py: Piper voice output
+- tts.py: Pocket TTS voice output
 - llm.py: Ollama
 - commands.py: the built-in commands
 - memory.py: remember / recall

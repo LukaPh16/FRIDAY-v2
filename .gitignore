@@ -44,3 +44,16 @@ cusparselt-local-tegra-repo-ubuntu2204-0.8.1_0.8.1-1_arm64.deb
 #Privacy
 memory.json
 faces.json
+
+# Large files: models (YuNet/SFace/YOLO, Pocket TTS weights + voice),
+# Jetson torch wheel and cuSPARSELt/cuDNN installers
+models/
+wheels/
+*.model
+*.bin
+*.tflite
+*.whl
+*.deb
+*.zip
+*.tar
+*.tar.gz

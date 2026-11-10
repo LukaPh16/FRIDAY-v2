@@ -24,6 +24,11 @@ DATABASE_FILE = os.path.join(BASE_DIR, "faces.json")
 CAMERA_INDEX = 0
 
 FRAME_WIDTH = 640
+
+# Cap face detection so it doesn't hog the CPU that Pocket TTS also
+# needs. Uncapped, it runs at full camera speed and speech stutters
+# (ALSA underruns).
+FACE_DETECTION_FPS = 10
 FRAME_HEIGHT = 480
 
 # OpenCV cosine similarity threshold.
@@ -44,6 +49,11 @@ state_lock = threading.Lock()
 
 # Signals the camera thread to stop.
 camera_stop_event = threading.Event()
+
+# Set while FRIDAY is speaking. Face and object detection pause so
+# Pocket TTS gets the CPU; otherwise speech is generated slower than
+# real time and lags. The last results are kept while paused.
+vision_pause_event = threading.Event()
 
 
 def stop_face_detection():
@@ -341,8 +351,16 @@ def start_face_detection():
     # Don't clear camera_stop_event here: a stop requested while
     # the models were loading must not be lost.
 
+    interval = 1.0 / max(FACE_DETECTION_FPS, 0.1)
+
     try:
         while not camera_stop_event.is_set():
+
+            if vision_pause_event.is_set():
+                camera_stop_event.wait(0.05)
+                continue
+
+            loop_started = time.monotonic()
 
             ret, frame = cap.read()
 
@@ -441,6 +459,12 @@ def start_face_detection():
                 end="",
                 flush=True
             )
+
+            # Wait out the rest of the frame interval. wait() wakes
+            # up at once if shutdown is requested.
+            elapsed = time.monotonic() - loop_started
+
+            camera_stop_event.wait(max(0.0, interval - elapsed))
 
     except Exception as error:
         print(f"\n[FRIDAY] Camera error: {error}")
