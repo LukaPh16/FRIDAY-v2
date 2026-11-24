@@ -25,7 +25,7 @@ CAMERA_INDEX = 0
 
 FRAME_WIDTH = 640
 
-# Cap face detection so it doesn't hog the CPU that Pocket TTS also
+# Cap face detection so it doesn't hog the CPU that the voice (TTS) also
 # needs. Uncapped, it runs at full camera speed and speech stutters
 # (ALSA underruns).
 FACE_DETECTION_FPS = 10
@@ -51,7 +51,7 @@ state_lock = threading.Lock()
 camera_stop_event = threading.Event()
 
 # Set while FRIDAY is speaking. Face and object detection pause so
-# Pocket TTS gets the CPU; otherwise speech is generated slower than
+# the voice (TTS) gets the CPU; otherwise speech is generated slower than
 # real time and lags. The last results are kept while paused.
 vision_pause_event = threading.Event()
 

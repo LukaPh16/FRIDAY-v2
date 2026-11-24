@@ -45,7 +45,7 @@ cusparselt-local-tegra-repo-ubuntu2204-0.8.1_0.8.1-1_arm64.deb
 memory.json
 faces.json
 
-# Large files: models (YuNet/SFace/YOLO, Pocket TTS weights + voice),
+# Large files: models (YuNet/SFace/YOLO, Piper voice),
 # Jetson torch wheel and cuSPARSELt/cuDNN installers
 models/
 wheels/

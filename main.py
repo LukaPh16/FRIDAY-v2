@@ -21,17 +21,22 @@ from camera import (
     vision_pause_event
 )
 from commands import route_command
-from config import NAME, CALLNAME, WAKEWORD, MIN_VOLUME
-from llm import warmup_ollama, ask_ai
+from config import NAME, CALLNAME, MIN_VOLUME
+from intent import (
+    split_wakeword,
+    is_goodbye,
+    is_quiet_command,
+    is_always_listen_command,
+    is_cancel,
+    extract_person_name
+)
+from llm import warmup_ollama, ask_ai, add_to_history
 from objects import (
     load_object_detector,
     start_object_detection,
     stop_object_detection
 )
 from tts import load_voice, TTSEngine
-
-GOODBYE_WORDS = ["goodbye", "bye", "exit"]
-CANCEL_WORDS = ["cancel", "never mind", "nevermind"]
 
 
 class Resources:
@@ -246,9 +251,32 @@ def main(model, arduino, stream, tts):
 
         print("[You]:", raw_input)
 
+        # The wake word at the start, after an optional greeting:
+        # "friday ...", "hey friday ...", "ok friday ...".
+        wake_heard, after_wake = split_wakeword(user_input)
+
+        # Whether FRIDAY is being spoken to right now. The broader
+        # mode phrases ("stay awake", "go to sleep") only count then,
+        # so background talk doesn't switch modes. The original
+        # "always listen" / "be quiet" work without the wake word, as
+        # before.
+        addressed = (
+            mode == "ALWAYS"
+            or waiting_for_command
+            or wake_heard
+        )
+
+        wants_quiet = is_quiet_command(user_input) and (
+            addressed or "be quiet" in user_input
+        )
+
+        wants_always_listen = is_always_listen_command(user_input) and (
+            addressed or "always listen" in user_input
+        )
+
         if pending_face_name:
 
-            if user_input in CANCEL_WORDS:
+            if is_cancel(user_input):
 
                 pending_face_name = False
 
@@ -267,9 +295,9 @@ def main(model, arduino, stream, tts):
                 continue
 
             if (
-                user_input in GOODBYE_WORDS
-                or "be quiet" in user_input
-                or "always listen" in user_input
+                is_goodbye(user_input)
+                or wants_quiet
+                or wants_always_listen
             ):
 
                 # This is a command, not a name: drop the
@@ -278,9 +306,8 @@ def main(model, arduino, stream, tts):
 
         if pending_face_name:
 
-            person_name = raw_input.strip(
-                " .,!?:;"
-            )
+            # "His name is John." -> "John"
+            person_name = extract_person_name(raw_input)
 
             if not person_name:
 
@@ -340,7 +367,7 @@ def main(model, arduino, stream, tts):
 
             continue
 
-        if "be quiet" in user_input:
+        if wants_quiet:
 
             mode = "WAKE"
 
@@ -361,7 +388,7 @@ def main(model, arduino, stream, tts):
 
             continue
 
-        if "always listen" in user_input:
+        if wants_always_listen:
 
             mode = "ALWAYS"
 
@@ -389,7 +416,7 @@ def main(model, arduino, stream, tts):
 
             else:
 
-                if user_input == WAKEWORD:
+                if wake_heard and not after_wake:
 
                     print(f"[FRIDAY]: Yes, {CALLNAME}?")
 
@@ -405,22 +432,20 @@ def main(model, arduino, stream, tts):
 
                     continue
 
-                elif user_input.startswith(WAKEWORD):
+                elif wake_heard:
 
-                    user_input = user_input.replace(
-                        WAKEWORD,
-                        "",
-                        1
-                    ).strip()
-
-                    if not user_input:
-                        continue
+                    user_input = after_wake
 
                 else:
 
                     arduino.set_mode("SLEEP")
 
                     continue
+
+        elif wake_heard:
+
+            # "friday, what time is it" in always-listen mode.
+            user_input = after_wake
 
         print("[You said]:", user_input)
 
@@ -430,7 +455,7 @@ def main(model, arduino, stream, tts):
 
             continue
 
-        if user_input in GOODBYE_WORDS:
+        if is_goodbye(user_input):
 
             reply = f"Goodbye, {CALLNAME}!"
 
@@ -454,6 +479,8 @@ def main(model, arduino, stream, tts):
             arduino.set_mode("THINK")
 
             reply = ask_ai(user_input)
+
+        add_to_history(user_input, reply)
 
         print(f"{NAME}: {reply}")
 

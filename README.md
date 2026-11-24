@@ -8,7 +8,7 @@ Still a work in progress, so expect things to change.
 
 - Listens for the wake word "Friday", or always listens if you tell it to
 - Answers questions with a small local LLM (qwen2.5:0.5b through Ollama)
-- Talks back with Pocket TTS (Kyutai), voice "eve"
+- Talks back with Piper, voice "amy"
 - Learns faces by voice and recognizes people later
 - Describes what it sees with YOLO11n, e.g. "I see Luka, a laptop and two cups, sir."
 - Remembers simple facts you tell it
@@ -25,22 +25,26 @@ Still a work in progress, so expect things to change.
 
 ## Commands
 
-By default it only reacts after you say "Friday". You can say "Friday" and wait for "Yes, sir?", or say it all at once: "Friday, what time is it".
+By default it only reacts after you say "Friday". You can say "Friday" (or "hey Friday") and wait for "Yes, sir?", or say it all at once: "Friday, what time is it".
 
-| Say | Does |
+You don't have to use exact wording. The examples below are just examples, and other phrasings with the same meaning work too ("got the time?", "what can you spot over there", "how many folks are here", "who's that standing there"). `intent.py` works out what you mean from the words you use. When a sentence is borderline (e.g. "what is this"), it asks qwen to decide between the likely commands and normal conversation.
+
+| Say something like | Does |
 |---|---|
-| always listen | stops needing the wake word |
-| be quiet | goes back to wake word mode |
-| what time is it / what's the date / what day is it / what year is it | time and date |
-| remember my favorite color is red | saves a fact |
-| recall my favorite color | says the saved fact |
-| remember this face | asks for a name and saves the face ("cancel" to stop) |
-| who is this / do you recognize this person | says who it sees |
-| how many people do you see | counts faces |
-| what do you see / look around | describes people and objects in front of it |
-| goodbye / bye / exit | shuts down |
+| always listen / keep listening / stay awake | stops needing the wake word |
+| be quiet / go to sleep / stop listening | goes back to wake word mode |
+| what's the time / what's today's date / what day is it / what year is it | time and date |
+| remember my favorite color is red / my keys are in the drawer, remember that | saves a fact |
+| what's my favorite color / where are my keys / recall my favorite color | says the saved fact |
+| remember this face / learn this person / meet my friend | asks for a name ("his name is John" works) and saves the face. "cancel" or "never mind" to stop |
+| who is this / do you know who that is / do you recognize me | says who it sees |
+| how many people do you see / how many people are here | counts faces |
+| what do you see / what's in front of you / look around | describes people and objects in front of it |
+| goodbye / bye Friday / shut down | shuts down |
 
-Anything else goes to the LLM.
+Only "always listen" and "be quiet" work without the wake word in wake word mode. The other mode phrases need "Friday" first, so background talk doesn't switch modes.
+
+Anything else goes to the LLM. It sees the last few exchanges and your saved facts, so follow-up questions work ("who wrote Harry Potter?" then "when was she born?").
 
 ## Setup
 
@@ -59,11 +63,11 @@ echo /usr/lib/aarch64-linux-gnu/libcusparseLt/12 | sudo tee /etc/ld.so.conf.d/cu
 sudo ldconfig
 ```
 
-Pocket TTS asks for `torch>=2.5.0` and `numpy>=2`, but it works with this torch and numpy 1.x. Install it with `--no-deps` or pip will replace torch. NVIDIA's torch 2.4 is built against numpy 1.x, so numpy has to stay below 2 (and opencv-python below 4.12, which needs numpy 2):
+NVIDIA's torch 2.4 is built against numpy 1.x, so numpy has to stay below 2 (and opencv-python below 4.12, which needs numpy 2). Install Piper with `--no-deps` so pip leaves onnxruntime alone:
 
 ```
-venv/bin/pip install --no-deps pocket-tts
-venv/bin/pip install "numpy<2" "opencv-python<4.12" einops huggingface-hub pydantic requests safetensors scipy sentencepiece tokenizers typer typing-extensions fastapi python-multipart uvicorn soundfile openai-whisper ollama pyaudio sounddevice pyserial onnxruntime
+venv/bin/pip install --no-deps piper-tts
+venv/bin/pip install "numpy<2" "opencv-python<4.12" pathvalidate scipy soundfile openai-whisper ollama pyaudio sounddevice pyserial onnxruntime requests
 ```
 
 Install Ollama and pull the model:
@@ -80,16 +84,12 @@ FRIDAY-v2/
     face_detection_yunet_2023mar.onnx
     face_recognition_sface_2021dec.onnx
     yolo11n.onnx
-    pocket_tts/        (Hugging Face cache, see below)
+    piper/
+      en_US-amy-medium.onnx
+      en_US-amy-medium.onnx.json
 ```
 
-Pocket TTS runs offline, so download its weights and the eve voice once:
-
-```
-FRIDAY_TTS_ONLINE=1 venv/bin/python -c "import tts; tts.load_voice()"
-```
-
-The model and voice are set with `TTS_LANGUAGE` and `TTS_VOICE` in config.py. The default `english_7m_2026-10` is the small model and runs faster than real time on the Orin Nano. `english` sounds a bit better but is about 2x slower than real time.
+- Piper Amy voice: https://huggingface.co/rhasspy/piper-voices/tree/v1.0.0/en/en_US/amy/medium (the voice is set with `TTS_MODEL` in config.py)
 
 - YuNet and SFace: https://github.com/opencv/opencv_zoo
 - YOLO11n: exported from Ultralytics with `yolo export model=yolo11n.pt format=onnx`
@@ -111,7 +111,7 @@ Settings like the wake word, what it calls you, mic name and sensitivity, and th
 - main.py: startup, the main loop and cleanup
 - config.py: settings
 - audio_input.py: mic, recording and Whisper
-- tts.py: Pocket TTS voice output
+- tts.py: Piper voice output
 - llm.py: Ollama
 - commands.py: the built-in commands
 - memory.py: remember / recall

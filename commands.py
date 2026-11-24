@@ -2,114 +2,25 @@ import datetime
 
 from camera import get_face_count, get_face_results
 from config import CALLNAME
+from intent import detect_intent
 from memory import remember_fact, recall_fact
 from objects import describe_scene
 
 
-def tell_time(text):
+TIME_FORMATS = {
+    "time": f"The time is %H:%M, {CALLNAME}.",
+    "date": f"Today is %B %d, {CALLNAME}.",
+    "day": f"Today is %A, {CALLNAME}.",
+    "month": f"It is %B, {CALLNAME}.",
+    "year": f"It is %Y, {CALLNAME}.",
+}
 
-    text = text.lower()
+
+def tell_time(kind):
 
     now = datetime.datetime.now()
 
-    if " time " in text:
-
-        return now.strftime(
-            f"The time is %H:%M, {CALLNAME}"
-        )
-
-    if " date " in text:
-
-        return now.strftime(
-            f"Today is %B %d, {CALLNAME}"
-        )
-
-    if " year " in text:
-
-        return now.strftime(
-            f"It is %Y, {CALLNAME}"
-        )
-
-    if " day " in text:
-
-        return now.strftime(
-            f"Today is %A, {CALLNAME}"
-        )
-
-    return None
-
-
-def is_face_registration_command(text):
-
-    phrases = [
-        "remember this face",
-        "remember the face",
-        "remember this person",
-        "save this face",
-        "save this person",
-        "learn this face",
-        "learn this person"
-    ]
-
-    return any(
-        phrase in text
-        for phrase in phrases
-    )
-
-
-def is_face_recognition_command(text):
-
-    phrases = [
-        "do you recognize this person",
-        "do you recognize this face",
-        "do you recognize these people",
-        "do you recognize these faces",
-        "do you recognise this person",
-        "do you recognise this face",
-        "do you recognise these people",
-        "do you recognise these faces",
-        "who is this person",
-        "who is this",
-        "who are these people",
-        "who are these",
-        "who do you see",
-        "identify this person",
-        "identify this face",
-        "identify these people",
-        "identify these faces"
-    ]
-
-    return any(
-        phrase in text
-        for phrase in phrases
-    )
-
-
-def is_face_count_command(text):
-
-    return (
-        "how many people do you see"
-        in text
-        or "how many faces do you see"
-        in text
-    )
-
-
-def is_scene_command(text):
-
-    phrases = [
-        "what do you see",
-        "what can you see",
-        "what's in front of you",
-        "what is in front of you",
-        "look around",
-        "describe what you see"
-    ]
-
-    return any(
-        phrase in text
-        for phrase in phrases
-    )
+    return now.strftime(TIME_FORMATS.get(kind, TIME_FORMATS["time"]))
 
 
 def describe_face_count():
@@ -212,7 +123,11 @@ def recognize_current_people():
 
 def route_command(user_input):
     """
-    Match user input against the built-in commands.
+    Work out what the user means and run the matching built-in command.
+
+    The wording doesn't have to be exact: "what's the time",
+    "got the time?" and "could you tell me what time it is" all work.
+    See intent.py for how this is decided.
 
     Returns:
         (reply, wants_face_name)
@@ -222,42 +137,40 @@ def route_command(user_input):
     when the next utterance should be used as a face name.
     """
 
-    if is_face_registration_command(user_input):
+    # Facts first, so "remember that my car is red" and "what is
+    # my wifi password" never reach the camera code or qwen.
+    reply = remember_fact(user_input)
+
+    if reply is not None:
+        return reply, False
+
+    reply = recall_fact(user_input)
+
+    if reply is not None:
+        return reply, False
+
+    intent, time_kind = detect_intent(user_input)
+
+    if intent == "learn_face":
 
         return (
             f"Of course, {CALLNAME}. "
             "What is this person's name?"
         ), True
 
-    reply = None
+    if intent is not None:
+        print(f"[FRIDAY] Understood as: {intent}")
 
-    if is_face_recognition_command(user_input):
+    if intent == "time":
+        return tell_time(time_kind), False
 
-        reply = recognize_current_people()
+    if intent == "count":
+        return describe_face_count(), False
 
-    if reply is None:
+    if intent == "who":
+        return recognize_current_people(), False
 
-        reply = remember_fact(user_input)
+    if intent == "see":
+        return describe_scene(), False
 
-    if reply is None:
-
-        reply = recall_fact(user_input)
-
-    if reply is None:
-        padded_input = f" {user_input} "
-
-        reply = tell_time(padded_input)
-
-    if reply is None:
-
-        if is_face_count_command(user_input):
-
-            reply = describe_face_count()
-
-    if reply is None:
-
-        if is_scene_command(user_input):
-
-            reply = describe_scene()
-
-    return reply, False
+    return None, False
